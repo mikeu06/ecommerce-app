@@ -9,12 +9,6 @@ pipeline {
 
     stages {
 
-        stage('Clone Repository') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
                 dir('frontend') {
@@ -65,10 +59,10 @@ pipeline {
                 dir('frontend') {
                     sh """
                         cat > public/env-config.js <<EOF
-                        window.env = {
-                          API_URL: '${API_URL}'
-                        };
-                        EOF
+window.env = {
+  API_URL: '${API_URL}'
+};
+EOF
                     """
                 }
             }
@@ -90,11 +84,7 @@ pipeline {
 
         stage('CloudFront Invalidation') {
             steps {
-                sh '''
-                    aws cloudfront create-invalidation \
-                    --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} \
-                    --paths "/*"
-                '''
+                sh 'aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"'
             }
         }
     }
