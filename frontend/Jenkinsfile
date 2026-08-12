@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        S3_BUCKET = ecommerce-frontend-buckets 
-        CLOUDFRONT_DISTRIBUTION_ID = E3BOCWTOPS1NNG
+        S3_BUCKET = 'ecommerce-frontend-buckets'
+        CLOUDFRONT_DISTRIBUTION_ID = 'E3BOCWTOPS1NNG'
         API_URL = 'https://d1kv89bgxlrhae.cloudfront.net'
     }
 
@@ -56,14 +56,18 @@ pipeline {
 
         stage('Update Environment Config') {
             steps {
-                sh """
+                sh '''
                     cat > public/env-config.js <<EOF
-                    window.env = {
-                      API_URL: '${API_URL}'
-                    };
-                    EOF
-                """
+window.env = {
+  API_URL: '${API_URL}'
+};
+EOF
+                '''
+            }
+        }
 
+        stage('Final Build') {
+            steps {
                 sh 'npm run build'
             }
         }
