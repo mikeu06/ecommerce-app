@@ -17,13 +17,17 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
+                dir('frontend') {
+                    sh 'npm ci'
+                }
             }
         }
 
         stage('Build React App') {
             steps {
-                sh 'npm run build'
+                dir('frontend') {
+                    sh 'npm run build'
+                }
             }
         }
 
@@ -35,13 +39,15 @@ pipeline {
 
         stage('SonarQube Analysis Frontend') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=ecommerce-frontend \
-                        -Dsonar.projectName=ecommerce-frontend \
-                        -Dsonar.sources=src
-                    '''
+                dir('frontend') {
+                    withSonarQubeEnv('sonarqube') {
+                        sh '''
+                            sonar-scanner \
+                            -Dsonar.projectKey=ecommerce-frontend \
+                            -Dsonar.projectName=ecommerce-frontend \
+                            -Dsonar.sources=src
+                        '''
+                    }
                 }
             }
         }
@@ -56,31 +62,39 @@ pipeline {
 
         stage('Update Environment Config') {
             steps {
-                sh '''
-                    cat > public/env-config.js <<EOF
-window.env = {
-  API_URL: '${API_URL}'
-};
-EOF
-                '''
+                dir('frontend') {
+                    sh """
+                        cat > public/env-config.js <<EOF
+                        window.env = {
+                          API_URL: '${API_URL}'
+                        };
+                        EOF
+                    """
+                }
             }
         }
 
         stage('Final Build') {
             steps {
-                sh 'npm run build'
+                dir('frontend') {
+                    sh 'npm run build'
+                }
             }
         }
 
         stage('Upload Build Files to S3') {
             steps {
-                sh 'aws s3 sync build/ s3://${S3_BUCKET}/ --delete'
+                sh 'aws s3 sync frontend/build/ s3://${S3_BUCKET}/ --delete'
             }
         }
 
         stage('CloudFront Invalidation') {
             steps {
-                sh 'aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"'
+                sh '''
+                    aws cloudfront create-invalidation \
+                    --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} \
+                    --paths "/*"
+                '''
             }
         }
     }
