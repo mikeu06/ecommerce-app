@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    environment {
+        S3_BUCKET = ecommerce-frontend-buckets 
+        CLOUDFRONT_DISTRIBUTION_ID = E3BOCWTOPS1NNG
+        API_URL = 'https://d1kv89bgxlrhae.cloudfront.net'
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm ci'
+            }
+        }
+
+        stage('Build React App') {
+            steps {
+                sh 'npm run build'
+            }
+        }
+
+        stage('Check SonarScanner') {
+            steps {
+                sh 'sonar-scanner --version'
+            }
+        }
+
+        stage('SonarQube Analysis Frontend') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                        sonar-scanner \
+                        -Dsonar.projectKey=ecommerce-frontend \
+                        -Dsonar.projectName=ecommerce-frontend \
+                        -Dsonar.sources=src
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Update Environment Config') {
+            steps {
+                sh """
+                    cat > public/env-
