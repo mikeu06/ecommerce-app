@@ -35,6 +35,7 @@ pipeline {
             steps {
                 script {
                     def scannerHome = tool 'SonarScanner'
+
                     sh "${scannerHome}/bin/sonar-scanner --version"
                 }
             }
@@ -72,10 +73,10 @@ pipeline {
                 dir('frontend') {
                     sh """
                         cat > public/env-config.js <<EOF
-                        window.env = {
-                            API_URL: '${API_URL}'
-                        };
-                        EOF
+window.env = {
+    API_URL: '${API_URL}'
+};
+EOF
                     """
                 }
             }
@@ -91,15 +92,17 @@ pipeline {
 
         stage('Upload Build Files to S3') {
             steps {
-                dir('frontend') {
-                    sh 'aws s3 sync build/ s3://${S3_BUCKET}/ --delete'
-                }
+                sh 'aws s3 sync frontend/build/ s3://${S3_BUCKET}/ --delete'
             }
         }
 
         stage('CloudFront Invalidation') {
             steps {
-                sh 'aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"'
+                sh '''
+                    aws cloudfront create-invalidation \
+                    --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} \
+                    --paths "/*"
+                '''
             }
         }
     }
