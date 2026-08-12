@@ -72,7 +72,7 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh """
-                        cat > public/env-config.js <<EOF
+cat > public/env-config.js <<EOF
 window.env = {
     API_URL: '${API_URL}'
 };
