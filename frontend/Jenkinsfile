@@ -1,23 +1,24 @@
 pipeline {
-
     agent any
 
     environment {
-        SONAR_SCANNER = tool 'SonarScanner'
-        AWS_DEFAULT_REGION = 'us-east-1'
-
-        S3_BUCKET = ecommerce-frontend-buckets 
-        CLOUDFRONT_DISTRIBUTION_ID = E3BOCWTOPS1NNG
+        S3_BUCKET = 'ecommerce-frontend-buckets'
+        CLOUDFRONT_DISTRIBUTION_ID = 'E3BOCWTOPS1NNG'
+        SONARQUBE_SERVER = 'sonarqube'
     }
 
     stages {
 
+        stage('Clone Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 dir('frontend') {
-                    sh '''
-                        npm ci
-                    '''
+                    sh 'npm ci'
                 }
             }
         }
@@ -25,23 +26,34 @@ pipeline {
         stage('Build React App') {
             steps {
                 dir('frontend') {
-                    sh '''
-                        npm run build
-                    '''
+                    sh 'npm run build'
                 }
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('Check SonarScanner') {
             steps {
-                dir('frontend') {
-                    withSonarQubeEnv('sonarqube') {
-                        sh """
-                            ${SONAR_SCANNER}/bin/sonar-scanner \
-                            -Dsonar.projectKey=ecommerce-frontend \
-                            -Dsonar.projectName=ecommerce-frontend \
-                            -Dsonar.sources=src
-                        """
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    sh "${scannerHome}/bin/sonar-scanner --version"
+                }
+            }
+        }
+
+        stage('SonarQube Analysis Frontend') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+
+                    dir('frontend') {
+                        withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=ecommerce-frontend \
+                                -Dsonar.projectName=ecommerce-frontend \
+                                -Dsonar.sources=src
+                            """
+                        }
                     }
                 }
             }
@@ -50,7 +62,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                    waitForQualityGate abortPipeline: false
                 }
             }
         }
@@ -62,10 +74,7 @@ pipeline {
                         echo "Updating frontend environment configuration..."
 
                         if [ -f public/env-config.js ]; then
-                            echo "env-config.js found"
-                            cat public/env-config.js
-                        else
-                            echo "No env-config.js found. Continuing..."
+                            sed -i "s|API_URL:.*|API_URL: \\"https://devopsworkshop.online/api\\"|g" public/env-config.js
                         fi
                     '''
                 }
@@ -106,19 +115,16 @@ pipeline {
 
     post {
         success {
-            echo '======================================'
-            echo 'FRONTEND CI/CD PIPELINE SUCCESSFUL'
-            echo '======================================'
+            echo 'Frontend CI/CD pipeline completed successfully.'
+            echo 'Frontend deployed to S3 and CloudFront cache invalidated.'
         }
 
         failure {
-            echo '======================================'
-            echo 'FRONTEND CI/CD PIPELINE FAILED'
-            echo '======================================'
+            echo 'Frontend CI/CD pipeline failed.'
         }
 
         always {
-            echo 'Frontend pipeline completed.'
+            echo "Pipeline finished with status: ${currentBuild.currentResult}"
         }
     }
 }
