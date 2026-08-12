@@ -1,24 +1,23 @@
 pipeline {
+
     agent any
 
     environment {
-        S3_BUCKET = 'ecommerce-frontend-buckets'
-        CLOUDFRONT_DISTRIBUTION_ID = 'E3BOCWTOPS1NNG'
-        API_URL = 'https://d1kv89bgxlrhae.cloudfront.net'
+        SONAR_SCANNER = tool 'SonarScanner'
+        AWS_DEFAULT_REGION = 'us-east-1'
+
+        S3_BUCKET = ecommerce-frontend-buckets 
+        CLOUDFRONT_DISTRIBUTION_ID = E3BOCWTOPS1NNG
     }
 
     stages {
 
-        stage('Clone Repository') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
                 dir('frontend') {
-                    sh 'npm ci'
+                    sh '''
+                        npm ci
+                    '''
                 }
             }
         }
@@ -26,35 +25,23 @@ pipeline {
         stage('Build React App') {
             steps {
                 dir('frontend') {
-                    sh 'npm run build'
+                    sh '''
+                        npm run build
+                    '''
                 }
             }
         }
 
-        stage('Check SonarScanner') {
+        stage('SonarQube Analysis') {
             steps {
-                script {
-                    def scannerHome = tool 'SonarScanner'
-
-                    sh "${scannerHome}/bin/sonar-scanner --version"
-                }
-            }
-        }
-
-        stage('SonarQube Analysis Frontend') {
-            steps {
-                script {
-                    def scannerHome = tool 'SonarScanner'
-
-                    dir('frontend') {
-                        withSonarQubeEnv('sonarqube') {
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                -Dsonar.projectKey=ecommerce-frontend \
-                                -Dsonar.projectName=ecommerce-frontend \
-                                -Dsonar.sources=src
-                            """
-                        }
+                dir('frontend') {
+                    withSonarQubeEnv('sonarqube') {
+                        sh """
+                            ${SONAR_SCANNER}/bin/sonar-scanner \
+                            -Dsonar.projectKey=ecommerce-frontend \
+                            -Dsonar.projectName=ecommerce-frontend \
+                            -Dsonar.sources=src
+                        """
                     }
                 }
             }
@@ -62,7 +49,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -71,13 +58,16 @@ pipeline {
         stage('Update Environment Config') {
             steps {
                 dir('frontend') {
-                    sh """
-cat > public/env-config.js <<EOF
-window.env = {
-    API_URL: '${API_URL}'
-};
-EOF
-                    """
+                    sh '''
+                        echo "Updating frontend environment configuration..."
+
+                        if [ -f public/env-config.js ]; then
+                            echo "env-config.js found"
+                            cat public/env-config.js
+                        else
+                            echo "No env-config.js found. Continuing..."
+                        fi
+                    '''
                 }
             }
         }
@@ -85,14 +75,21 @@ EOF
         stage('Final Build') {
             steps {
                 dir('frontend') {
-                    sh 'npm run build'
+                    sh '''
+                        rm -rf build
+                        npm run build
+                    '''
                 }
             }
         }
 
         stage('Upload Build Files to S3') {
             steps {
-                sh 'aws s3 sync frontend/build/ s3://${S3_BUCKET}/ --delete'
+                dir('frontend') {
+                    sh '''
+                        aws s3 sync build/ s3://${S3_BUCKET}/ --delete
+                    '''
+                }
             }
         }
 
@@ -104,6 +101,24 @@ EOF
                     --paths "/*"
                 '''
             }
+        }
+    }
+
+    post {
+        success {
+            echo '======================================'
+            echo 'FRONTEND CI/CD PIPELINE SUCCESSFUL'
+            echo '======================================'
+        }
+
+        failure {
+            echo '======================================'
+            echo 'FRONTEND CI/CD PIPELINE FAILED'
+            echo '======================================'
+        }
+
+        always {
+            echo 'Frontend pipeline completed.'
         }
     }
 }
