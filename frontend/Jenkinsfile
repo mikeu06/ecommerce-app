@@ -9,6 +9,12 @@ pipeline {
 
     stages {
 
+        stage('Clone Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 dir('frontend') {
@@ -27,20 +33,27 @@ pipeline {
 
         stage('Check SonarScanner') {
             steps {
-                sh 'sonar-scanner --version'
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    sh "${scannerHome}/bin/sonar-scanner --version"
+                }
             }
         }
 
         stage('SonarQube Analysis Frontend') {
             steps {
-                dir('frontend') {
-                    withSonarQubeEnv('sonarqube') {
-                        sh '''
-                            sonar-scanner \
-                            -Dsonar.projectKey=ecommerce-frontend \
-                            -Dsonar.projectName=ecommerce-frontend \
-                            -Dsonar.sources=src
-                        '''
+                script {
+                    def scannerHome = tool 'SonarScanner'
+
+                    dir('frontend') {
+                        withSonarQubeEnv('sonarqube') {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=ecommerce-frontend \
+                                -Dsonar.projectName=ecommerce-frontend \
+                                -Dsonar.sources=src
+                            """
+                        }
                     }
                 }
             }
@@ -59,10 +72,10 @@ pipeline {
                 dir('frontend') {
                     sh """
                         cat > public/env-config.js <<EOF
-window.env = {
-  API_URL: '${API_URL}'
-};
-EOF
+                        window.env = {
+                            API_URL: '${API_URL}'
+                        };
+                        EOF
                     """
                 }
             }
@@ -78,7 +91,9 @@ EOF
 
         stage('Upload Build Files to S3') {
             steps {
-                sh 'aws s3 sync frontend/build/ s3://${S3_BUCKET}/ --delete'
+                dir('frontend') {
+                    sh 'aws s3 sync build/ s3://${S3_BUCKET}/ --delete'
+                }
             }
         }
 
