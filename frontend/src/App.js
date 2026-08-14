@@ -28,7 +28,7 @@ function App() {
   const [justAdded, setJustAdded] = useState(null);
 
   const loadProducts = useCallback(() => {
-    return fetch(`${API_BASE_URL}/api/products`)
+    return fetch(`${API_BASE_URL}/products`)
       .then((res) => {
         if (!res.ok) throw new Error(`API responded with ${res.status}`);
         return res.json();
