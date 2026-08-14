@@ -4,8 +4,12 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
+
         S3_BUCKET = 'ecommerce-frontend-buckets'
+
         CLOUDFRONT_DISTRIBUTION_ID = 'E3BOCWTOPS1NNG'
+
+        API_URL = 'https://devopsworkshop.online/api'
     }
 
     stages {
@@ -19,28 +23,16 @@ pipeline {
         stage('Verify Repository') {
             steps {
                 sh '''
-                    set -e
-
-                    echo "======================================"
-                    echo "Repository Verification"
-                    echo "======================================"
-
+                    echo "Workspace:"
                     pwd
 
                     echo ""
-                    echo "Repository files:"
+                    echo "Repository:"
                     ls -la
 
                     echo ""
-                    echo "Frontend directory:"
+                    echo "Frontend:"
                     ls -la frontend
-
-                    echo ""
-                    echo "Checking package.json..."
-                    test -f frontend/package.json
-
-                    echo ""
-                    echo "Repository verification successful."
                 '''
             }
         }
@@ -50,15 +42,7 @@ pipeline {
                 dir('frontend') {
                     sh '''
                         set -e
-
-                        echo "======================================"
-                        echo "Installing Frontend Dependencies"
-                        echo "======================================"
-
                         npm ci
-
-                        echo ""
-                        echo "Dependencies installed successfully."
                     '''
                 }
             }
@@ -69,19 +53,7 @@ pipeline {
                 dir('frontend') {
                     sh '''
                         set -e
-
-                        echo "======================================"
-                        echo "Building React Application"
-                        echo "======================================"
-
                         npm run build
-
-                        echo ""
-                        echo "React build completed successfully."
-
-                        echo ""
-                        echo "Build directory:"
-                        ls -lah build/
                     '''
                 }
             }
@@ -93,21 +65,16 @@ pipeline {
                     def scannerHome = tool 'SonarScanner'
 
                     sh """
-                        set -e
-
-                        echo "======================================"
-                        echo "Checking SonarQube Scanner"
-                        echo "======================================"
-
                         ${scannerHome}/bin/sonar-scanner --version
                     """
                 }
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('SonarQube Analysis Frontend') {
             steps {
                 script {
+
                     def scannerHome = tool 'SonarScanner'
 
                     dir('frontend') {
@@ -115,19 +82,10 @@ pipeline {
                         withSonarQubeEnv('sonarqube') {
 
                             sh """
-                                set -e
-
-                                echo "======================================"
-                                echo "Running SonarQube Analysis"
-                                echo "======================================"
-
                                 ${scannerHome}/bin/sonar-scanner \
-                                    -Dsonar.projectKey=ecommerce-frontend \
-                                    -Dsonar.projectName=ecommerce-frontend \
-                                    -Dsonar.sources=src
-
-                                echo ""
-                                echo "SonarQube analysis completed successfully."
+                                -Dsonar.projectKey=ecommerce-frontend \
+                                -Dsonar.projectName=ecommerce-frontend \
+                                -Dsonar.sources=src
                             """
                         }
                     }
@@ -138,6 +96,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
+
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -146,30 +105,23 @@ pipeline {
         stage('Update Environment Config') {
             steps {
                 dir('frontend') {
+
                     sh '''
                         set -e
 
-                        echo "======================================"
-                        echo "Updating Frontend Environment Config"
-                        echo "======================================"
+                        echo "Updating frontend API configuration..."
 
-                        if [ -f public/env-config.js ]; then
-
-                            echo "Found public/env-config.js"
-
-                            sed -i 's|API_URL:.*|API_URL: "https://devopsworkshop.online/api"|g' \
-                                public/env-config.js
-
-                            echo ""
-                            echo "Updated configuration:"
-                            cat public/env-config.js
-
-                        else
-
-                            echo "public/env-config.js does not exist."
-                            echo "Skipping environment configuration update."
-
+                        if [ ! -f public/env-config.js ]; then
+                            echo "ERROR: public/env-config.js not found"
+                            exit 1
                         fi
+
+                        sed -i 's|API_URL:.*|API_URL: "https://devopsworkshop.online/api"|g' \
+                            public/env-config.js
+
+                        echo ""
+                        echo "Updated env-config.js:"
+                        cat public/env-config.js
                     '''
                 }
             }
@@ -178,57 +130,26 @@ pipeline {
         stage('Final Build') {
             steps {
                 dir('frontend') {
+
                     sh '''
                         set -e
 
-                        echo "======================================"
-                        echo "Creating Final Production Build"
-                        echo "======================================"
+                        echo "Creating final production build..."
 
                         rm -rf build
 
                         npm run build
 
                         echo ""
-                        echo "Final production build completed."
+                        echo "Checking final environment configuration..."
 
-                        echo ""
-                        echo "Build contents:"
-                        ls -lah build/
+                        cat build/env-config.js
                     '''
                 }
             }
         }
 
-        stage('Verify AWS Credentials') {
-            steps {
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'aws-credentials',
-                        usernameVariable: 'AWS_ACCESS_KEY_ID',
-                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        echo "======================================"
-                        echo "Verifying AWS Credentials"
-                        echo "======================================"
-
-                        aws sts get-caller-identity \
-                            --region ${AWS_REGION}
-
-                        echo ""
-                        echo "AWS credentials verified successfully."
-                    '''
-                }
-            }
-        }
-
-        stage('Upload Build to S3') {
+        stage('Upload Build Files to S3') {
             steps {
 
                 withCredentials([
@@ -244,26 +165,13 @@ pipeline {
                         sh '''
                             set -e
 
-                            echo "======================================"
-                            echo "Uploading Frontend Build to S3"
-                            echo "======================================"
-
-                            echo ""
-                            echo "Checking build directory..."
-
-                            test -d build
-
-                            echo ""
-                            echo "Uploading to:"
-                            echo "s3://${S3_BUCKET}/"
+                            echo "Uploading frontend to S3..."
 
                             aws s3 sync build/ \
                                 s3://${S3_BUCKET}/ \
-                                --delete \
-                                --region ${AWS_REGION}
+                                --delete
 
-                            echo ""
-                            echo "Frontend successfully uploaded to S3."
+                            echo "Frontend uploaded successfully."
                         '''
                     }
                 }
@@ -284,56 +192,13 @@ pipeline {
                     sh '''
                         set -e
 
-                        echo "======================================"
-                        echo "Creating CloudFront Invalidation"
-                        echo "======================================"
+                        echo "Creating CloudFront invalidation..."
 
                         aws cloudfront create-invalidation \
                             --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} \
                             --paths "/*"
 
-                        echo ""
-                        echo "CloudFront invalidation created successfully."
-                    '''
-                }
-            }
-        }
-
-        stage('Deployment Verification') {
-            steps {
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'aws-credentials',
-                        usernameVariable: 'AWS_ACCESS_KEY_ID',
-                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        echo "======================================"
-                        echo "Deployment Verification"
-                        echo "======================================"
-
-                        echo ""
-                        echo "Checking S3 bucket..."
-
-                        aws s3 ls \
-                            s3://${S3_BUCKET}/ \
-                            --region ${AWS_REGION}
-
-                        echo ""
-                        echo "Checking CloudFront distribution..."
-
-                        aws cloudfront get-distribution \
-                            --id ${CLOUDFRONT_DISTRIBUTION_ID} \
-                            --query 'Distribution.{Status:Status,DomainName:DomainName}' \
-                            --output table
-
-                        echo ""
-                        echo "Deployment verification completed successfully."
+                        echo "CloudFront invalidation created."
                     '''
                 }
             }
@@ -342,39 +207,19 @@ pipeline {
 
     post {
 
+        always {
+
+            echo "Frontend pipeline completed with status: ${currentBuild.currentResult}"
+        }
+
         success {
-            echo '''
-========================================
-FRONTEND CI/CD PIPELINE SUCCESSFUL
-========================================
 
-GitHub Checkout       : SUCCESS
-NPM Dependencies      : SUCCESS
-React Build           : SUCCESS
-SonarQube Analysis    : SUCCESS
-Quality Gate          : PASSED
-Final Build           : SUCCESS
-S3 Deployment         : SUCCESS
-CloudFront            : SUCCESS
-
-Frontend deployment completed successfully.
-========================================
-'''
+            echo "Frontend CI/CD pipeline completed successfully."
         }
 
         failure {
-            echo '''
-========================================
-FRONTEND CI/CD PIPELINE FAILED
-========================================
 
-Please check the failed stage above.
-========================================
-'''
-        }
-
-        always {
-            echo "Pipeline finished with status: ${currentBuild.currentResult}"
+            echo "Frontend CI/CD pipeline failed."
         }
     }
 }
