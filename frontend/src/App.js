@@ -16,6 +16,7 @@ function skuFor(product) {
     .join('')
     .toUpperCase()
     .slice(0, 3);
+
   return `${initials}-${String(product.id).padStart(3, '0')}`;
 }
 
@@ -30,16 +31,20 @@ function App() {
   const loadProducts = useCallback(() => {
     return fetch(`${API_BASE_URL}/products`)
       .then((res) => {
-        if (!res.ok) throw new Error(`API responded with ${res.status}`);
+        if (!res.ok) {
+          throw new Error(`API responded with ${res.status}`);
+        }
         return res.json();
       })
       .then((data) => setProducts(data));
   }, []);
 
   const loadCart = useCallback(() => {
-    return fetch(`${API_BASE_URL}/api/cart`)
+    return fetch(`${API_BASE_URL}/cart`)
       .then((res) => {
-        if (!res.ok) throw new Error(`API responded with ${res.status}`);
+        if (!res.ok) {
+          throw new Error(`API responded with ${res.status}`);
+        }
         return res.json();
       })
       .then((data) => setCart(data));
@@ -52,40 +57,77 @@ function App() {
   }, [loadProducts, loadCart]);
 
   const addToCart = (productId) => {
-    fetch(`${API_BASE_URL}/api/cart/items`, {
+    fetch(`${API_BASE_URL}/cart/items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, quantity: 1 }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        productId,
+        quantity: 1,
+      }),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`API responded with ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data) => {
         setCart(data);
         setJustAdded(productId);
-        setTimeout(() => setJustAdded(null), 900);
+
+        setTimeout(() => {
+          setJustAdded(null);
+        }, 900);
       })
       .catch((err) => setError(err.message));
   };
 
   const updateQuantity = (itemId, quantity) => {
-    fetch(`${API_BASE_URL}/api/cart/items/${itemId}`, {
+    fetch(`${API_BASE_URL}/cart/items/${itemId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quantity }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        quantity,
+      }),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`API responded with ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data) => setCart(data))
       .catch((err) => setError(err.message));
   };
 
   const removeFromCart = (itemId) => {
-    fetch(`${API_BASE_URL}/api/cart/items/${itemId}`, { method: 'DELETE' })
-      .then((res) => res.json())
+    fetch(`${API_BASE_URL}/cart/items/${itemId}`, {
+      method: 'DELETE',
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`API responded with ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data) => setCart(data))
       .catch((err) => setError(err.message));
   };
 
-  const cartCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
-  const todayStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
+  const cartCount = cart.items.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
+
+  const todayStr = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  });
 
   return (
     <div className="catalog">
@@ -94,7 +136,11 @@ function App() {
           <h1 className="brand-mark">NODE &amp; WIRE</h1>
           <div className="brand-sub">Desk Hardware Catalog</div>
         </div>
-        <button className="cart-toggle" onClick={() => setShowCart(true)}>
+
+        <button
+          className="cart-toggle"
+          onClick={() => setShowCart(true)}
+        >
           Cart
           <span className="badge">{cartCount}</span>
         </button>
@@ -105,7 +151,12 @@ function App() {
         <span>{todayStr}</span>
       </div>
 
-      {loading && <div className="status-line">loading catalog...</div>}
+      {loading && (
+        <div className="status-line">
+          loading catalog...
+        </div>
+      )}
+
       {error && (
         <div className="status-line error">
           could not reach backend api — {error}
@@ -116,16 +167,30 @@ function App() {
         <div className="grid">
           {products.map((p) => (
             <div className="product-card" key={p.id}>
-              <span className="product-sku">{skuFor(p)}</span>
+              <span className="product-sku">
+                {skuFor(p)}
+              </span>
+
               <ProductIcon name={p.name} />
-              <h3 className="product-name">{p.name}</h3>
+
+              <h3 className="product-name">
+                {p.name}
+              </h3>
+
               <div className="product-row">
-                <span className="product-price">${Number(p.price).toFixed(2)}</span>
+                <span className="product-price">
+                  ${Number(p.price).toFixed(2)}
+                </span>
+
                 <button
-                  className={`add-btn ${justAdded === p.id ? 'added' : ''}`}
+                  className={`add-btn ${
+                    justAdded === p.id ? 'added' : ''
+                  }`}
                   onClick={() => addToCart(p.id)}
                 >
-                  {justAdded === p.id ? 'Added ✓' : 'Add to cart'}
+                  {justAdded === p.id
+                    ? 'Added ✓'
+                    : 'Add to cart'}
                 </button>
               </div>
             </div>
@@ -135,34 +200,80 @@ function App() {
 
       {showCart && (
         <>
-          <div className="drawer-overlay" onClick={() => setShowCart(false)} />
+          <div
+            className="drawer-overlay"
+            onClick={() => setShowCart(false)}
+          />
+
           <aside className="drawer">
             <div className="drawer-head">
               <h2>Order Slip</h2>
-              <button className="drawer-close" onClick={() => setShowCart(false)} aria-label="Close cart">
+
+              <button
+                className="drawer-close"
+                onClick={() => setShowCart(false)}
+                aria-label="Close cart"
+              >
                 ×
               </button>
             </div>
 
             <div className="drawer-body">
-              {cart.items.length === 0 && <p className="drawer-empty">No items logged yet.</p>}
+              {cart.items.length === 0 && (
+                <p className="drawer-empty">
+                  No items logged yet.
+                </p>
+              )}
+
               {cart.items.map((item) => (
                 <div className="cart-line" key={item.id}>
                   <span className="cart-line-name">
                     {item.productName}
-                    <span className="cart-line-unit">${item.price} / unit</span>
+
+                    <span className="cart-line-unit">
+                      ${item.price} / unit
+                    </span>
                   </span>
+
                   <div className="qty-stepper">
-                    <button onClick={() => updateQuantity(item.id, item.quantity - 1)} aria-label="Decrease quantity">
+                    <button
+                      onClick={() =>
+                        updateQuantity(
+                          item.id,
+                          item.quantity - 1
+                        )
+                      }
+                      aria-label="Decrease quantity"
+                    >
                       −
                     </button>
+
                     <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.id, item.quantity + 1)} aria-label="Increase quantity">
+
+                    <button
+                      onClick={() =>
+                        updateQuantity(
+                          item.id,
+                          item.quantity + 1
+                        )
+                      }
+                      aria-label="Increase quantity"
+                    >
                       +
                     </button>
                   </div>
-                  <span className="cart-line-subtotal">${item.subtotal.toFixed(2)}</span>
-                  <button className="remove-x" onClick={() => removeFromCart(item.id)} aria-label="Remove item">
+
+                  <span className="cart-line-subtotal">
+                    ${item.subtotal.toFixed(2)}
+                  </span>
+
+                  <button
+                    className="remove-x"
+                    onClick={() =>
+                      removeFromCart(item.id)
+                    }
+                    aria-label="Remove item"
+                  >
                     ×
                   </button>
                 </div>
@@ -172,9 +283,16 @@ function App() {
             <div className="drawer-foot">
               <div className="total-row">
                 <span>Total due</span>
-                <span>${cart.total.toFixed(2)}</span>
+
+                <span>
+                  ${cart.total.toFixed(2)}
+                </span>
               </div>
-              <button className="checkout-btn" disabled={cart.items.length === 0}>
+
+              <button
+                className="checkout-btn"
+                disabled={cart.items.length === 0}
+              >
                 Checkout (demo)
               </button>
             </div>
