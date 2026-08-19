@@ -1,0 +1,119 @@
+pipeline {
+
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        TF_DIR = 'terraform/environments/dev'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set -e
+
+                        cd ${TF_DIR}
+
+                        terraform init
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                sh '''
+                    set -e
+
+                    cd ${TF_DIR}
+
+                    terraform validate
+                '''
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                sh '''
+                    set -e
+
+                    checkov \
+                        -d terraform \
+                        --framework terraform
+                '''
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set -e
+
+                        cd ${TF_DIR}
+
+                        terraform plan \
+                            -var="aws_region=${AWS_REGION}" \
+                            -out=tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Manual Approval') {
+            steps {
+                input message: 'Terraform validation, security scan and plan passed. Approve deployment?',
+                      ok: 'Deploy'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set -e
+
+                        cd ${TF_DIR}
+
+                        terraform apply -auto-approve tfplan
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                rm -f ${TF_DIR}/tfplan
+            '''
+        }
+    }
+}
