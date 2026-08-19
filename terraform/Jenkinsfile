@@ -15,6 +15,15 @@ pipeline {
             }
         }
 
+        stage('Terraform Format Check') {
+            steps {
+                sh '''
+                    set -e
+                    terraform fmt -check -recursive terraform
+                '''
+            }
+        }
+
         stage('Terraform Init') {
             steps {
                 withCredentials([
@@ -27,9 +36,11 @@ pipeline {
                     sh '''
                         set -e
 
-                        cd ${TF_DIR}
+                        export AWS_DEFAULT_REGION="${AWS_REGION}"
 
-                        terraform init
+                        cd "${TF_DIR}"
+
+                        terraform init -input=false
                     '''
                 }
             }
@@ -40,14 +51,14 @@ pipeline {
                 sh '''
                     set -e
 
-                    cd ${TF_DIR}
+                    cd "${TF_DIR}"
 
                     terraform validate
                 '''
             }
         }
 
-        stage('Security Scan') {
+        stage('Security Scan - Checkov') {
             steps {
                 sh '''
                     set -e
@@ -66,15 +77,22 @@ pipeline {
                         credentialsId: 'aws-credentials',
                         usernameVariable: 'AWS_ACCESS_KEY_ID',
                         passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ),
+                    usernamePassword(
+                        credentialsId: 'terraform-db-credentials',
+                        usernameVariable: 'TF_VAR_db_username',
+                        passwordVariable: 'TF_VAR_db_password'
                     )
                 ]) {
                     sh '''
                         set -e
 
-                        cd ${TF_DIR}
+                        export AWS_DEFAULT_REGION="${AWS_REGION}"
+
+                        cd "${TF_DIR}"
 
                         terraform plan \
-                            -var="aws_region=${AWS_REGION}" \
+                            -input=false \
                             -out=tfplan
                     '''
                 }
@@ -83,8 +101,10 @@ pipeline {
 
         stage('Manual Approval') {
             steps {
-                input message: 'Terraform validation, security scan and plan passed. Approve deployment?',
-                      ok: 'Deploy'
+                input(
+                    message: 'Terraform validation, security scan and plan passed. Approve deployment?',
+                    ok: 'Deploy'
+                )
             }
         }
 
@@ -95,14 +115,24 @@ pipeline {
                         credentialsId: 'aws-credentials',
                         usernameVariable: 'AWS_ACCESS_KEY_ID',
                         passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ),
+                    usernamePassword(
+                        credentialsId: 'terraform-db-credentials',
+                        usernameVariable: 'TF_VAR_db_username',
+                        passwordVariable: 'TF_VAR_db_password'
                     )
                 ]) {
                     sh '''
                         set -e
 
-                        cd ${TF_DIR}
+                        export AWS_DEFAULT_REGION="${AWS_REGION}"
 
-                        terraform apply -auto-approve tfplan
+                        cd "${TF_DIR}"
+
+                        terraform apply \
+                            -input=false \
+                            -auto-approve \
+                            tfplan
                     '''
                 }
             }
@@ -112,7 +142,7 @@ pipeline {
     post {
         always {
             sh '''
-                rm -f ${TF_DIR}/tfplan
+                rm -f "${TF_DIR}/tfplan"
             '''
         }
     }
