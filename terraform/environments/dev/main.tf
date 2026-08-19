@@ -42,9 +42,9 @@ module "rds" {
 
   db_name = "ecommerce"
 
-  username = "postgres"
+  username = var.db_username
 
-  password = "Password123!"
+  password = var.db_password
 
   private_subnet_ids = module.vpc.private_subnet_ids
 
